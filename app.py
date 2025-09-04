@@ -37,7 +37,14 @@ idx_to_class = {v: k for k, v in class_indices.items()}
 # ======================================================
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model(MODEL_PATH, compile=False)
+    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+
+    # FIX: kalau model punya lebih dari 1 input, pakai input pertama
+    if isinstance(model.input, list):
+        st.warning("⚠️ Model memiliki lebih dari 1 input, hanya input pertama yang digunakan.")
+        model = tf.keras.Model(inputs=model.input[0], outputs=model.output)
+
+    return model
 
 model = load_model()
 
@@ -63,11 +70,11 @@ def predict(image: Image.Image):
 # ======================================================
 st.set_page_config(page_title="Cat vs Dog Classifier", page_icon="🐶🐱", layout="centered")
 
-st.title("🐶🐱 Cat vs Dog Classifier - MobileNetV2 (.keras)")
+st.title("🐶🐱 Cat vs Dog Classifier - MobileNetV2")
 st.markdown(
     """
     Upload gambar **Kucing** atau **Anjing**, lalu klik **Prediksi** untuk melihat hasil klasifikasi.  
-    Model ini diambil dari **Hugging Face Hub** dalam format `.keras` (lebih aman & modern dibanding `.h5`).
+    Model ini diambil dari **Hugging Face Hub** dalam format `.keras`.
     """
 )
 
