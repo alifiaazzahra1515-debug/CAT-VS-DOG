@@ -8,7 +8,7 @@ import tensorflow as tf
 # ======================================================
 # Konfigurasi
 # ======================================================
-MODEL_PATH = "model_mobilenetv2.h5"  # pastikan file ini ada di folder yang sama
+MODEL_PATH = ""C:\Users\LENOVO\OneDrive\CAT VS DOG\model_mobilenetv2.h5""  # pastikan file ini ada di folder yang sama
 CLASS_INDICES_PATH = "class_indices.json"
 IMG_SIZE = 128
 
