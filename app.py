@@ -9,7 +9,7 @@ import tensorflow as tf
 # ======================================================
 # Konfigurasi
 # ======================================================
-MODEL_URL = https://huggingface.co/alifia1/catdog1/resolve/main/model_mobilenetv2.h5"
+MODEL_URL = "https://huggingface.co/alifia1/catdog1/resolve/main/model_mobilenetv2.h5"
 MODEL_PATH = "model_mobilenetv2.h5"
 CLASS_INDICES_PATH = "class_indices.json"
 IMG_SIZE = 128
