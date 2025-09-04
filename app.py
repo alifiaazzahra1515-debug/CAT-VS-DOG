@@ -37,7 +37,12 @@ idx_to_class = {v: k for k, v in class_indices.items()}
 # ======================================================
 @st.cache_resource
 def load_model():
-    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    model = tf.keras.models.load_model(
+        MODEL_PATH,
+        compile=False,
+        safe_mode=False,   # biar h5 lama tetap bisa dibaca
+        custom_objects={'Functional': tf.keras.models.Model}
+    )
 
     # Jika model punya lebih dari 1 input → pakai input utama
     if isinstance(model.input, list):
@@ -70,7 +75,12 @@ def predict(image: Image.Image):
 st.set_page_config(page_title="Cat vs Dog Classifier", page_icon="🐶🐱", layout="centered")
 
 st.title("🐶🐱 Cat vs Dog Classifier - MobileNetV2")
-st.markdown("Upload gambar **Kucing** atau **Anjing**, lalu klik **Prediksi** untuk melihat hasil klasifikasi.")
+st.markdown(
+    """
+    Upload gambar **Kucing** atau **Anjing**, lalu klik **Prediksi** untuk melihat hasil klasifikasi.
+    Model ini dilatih dengan arsitektur **MobileNetV2** dan dataset *Microsoft Cats vs Dogs*.
+    """
+)
 
 uploaded_file = st.file_uploader("📂 Upload gambar", type=["jpg", "jpeg", "png"])
 
