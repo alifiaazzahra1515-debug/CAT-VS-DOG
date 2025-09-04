@@ -1,36 +1,27 @@
 import streamlit as st
 import numpy as np
-import requests
 import os
-import json
 from PIL import Image
 import tensorflow as tf
+import json
 
 # ======================================================
 # Konfigurasi
 # ======================================================
-MODEL_URL = "https://huggingface.co/alifia1/catdog1/resolve/main/model_mobilenetv2.keras"
-MODEL_PATH = "model_mobilenetv2.keras"
-CLASS_INDICES_PATH = "class_indices.json"
-IMG_SIZE = 128
+MODEL_PATH = "best_cnn_model.h5"   # model hasil training
+CLASS_INDICES_PATH = "class_indices.json"  # mapping kelas (misalnya {"Cat":0,"Dog":1})
+IMG_SIZE = 128  # sesuaikan dengan saat training
 
 # ======================================================
-# Download model jika belum ada
+# Load class indices
 # ======================================================
-if not os.path.exists(MODEL_PATH):
-    with st.spinner("📥 Downloading model (.keras) from Hugging Face..."):
-        r = requests.get(MODEL_URL)
-        with open(MODEL_PATH, "wb") as f:
-            f.write(r.content)
-
-# ======================================================
-# Load class indices (Cat → 0, Dog → 1)
-# ======================================================
-with open(CLASS_INDICES_PATH, "r") as f:
-    class_indices = json.load(f)
-
-# Buat mapping index → label
-idx_to_class = {v: k for k, v in class_indices.items()}
+if os.path.exists(CLASS_INDICES_PATH):
+    with open(CLASS_INDICES_PATH, "r") as f:
+        class_indices = json.load(f)
+    idx_to_class = {v: k for k, v in class_indices.items()}
+else:
+    # fallback kalau tidak ada file class_indices.json
+    idx_to_class = {0: "Class 0", 1: "Class 1"}
 
 # ======================================================
 # Load model dengan cache
@@ -38,12 +29,9 @@ idx_to_class = {v: k for k, v in class_indices.items()}
 @st.cache_resource
 def load_model():
     model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-
-    # FIX: kalau model punya lebih dari 1 input, pakai input pertama
+    # Jika model punya multiple input → ambil input pertama
     if isinstance(model.input, list):
-        st.warning("⚠️ Model memiliki lebih dari 1 input, hanya input pertama yang digunakan.")
         model = tf.keras.Model(inputs=model.input[0], outputs=model.output)
-
     return model
 
 model = load_model()
@@ -56,27 +44,29 @@ def predict(image: Image.Image):
     arr = np.array(img) / 255.0
     arr = np.expand_dims(arr, axis=0)
 
-    prob = model.predict(arr, verbose=0)[0][0]
+    preds = model.predict(arr, verbose=0)
 
-    # Probabilitas untuk kedua kelas
-    prob_cat = 1 - prob
-    prob_dog = prob
+    # Binary classification (1 neuron sigmoid)
+    if preds.shape[-1] == 1:
+        prob = preds[0][0]
+        prob_class0 = 1 - prob
+        prob_class1 = prob
+        pred_class = 1 if prob_class1 > 0.5 else 0
+        return idx_to_class[pred_class], {idx_to_class[0]: prob_class0, idx_to_class[1]: prob_class1}
 
-    pred_class = "Dog" if prob_dog > 0.5 else "Cat"
-    return pred_class, prob_cat, prob_dog
+    # Multi-class classification (softmax)
+    else:
+        probs = preds[0]
+        pred_class = np.argmax(probs)
+        return idx_to_class[pred_class], {idx_to_class[i]: float(probs[i]) for i in range(len(probs))}
 
 # ======================================================
 # Streamlit UI
 # ======================================================
-st.set_page_config(page_title="Cat vs Dog Classifier", page_icon="🐶🐱", layout="centered")
+st.set_page_config(page_title="CNN Image Classifier", page_icon="🖼️", layout="centered")
 
-st.title("🐶🐱 Cat vs Dog Classifier - MobileNetV2")
-st.markdown(
-    """
-    Upload gambar **Kucing** atau **Anjing**, lalu klik **Prediksi** untuk melihat hasil klasifikasi.  
-    Model ini diambil dari **Hugging Face Hub** dalam format `.keras`.
-    """
-)
+st.title("🖼️ CNN Image Classifier")
+st.markdown("Upload gambar untuk diprediksi dengan **best_cnn_model.h5**.")
 
 uploaded_file = st.file_uploader("📂 Upload gambar", type=["jpg", "jpeg", "png"])
 
@@ -85,17 +75,12 @@ if uploaded_file:
     st.image(image, caption="Gambar yang diupload", use_container_width=True)
 
     if st.button("🔍 Prediksi"):
-        label, prob_cat, prob_dog = predict(image)
+        label, probs = predict(image)
 
         st.success(f"Hasil Prediksi: **{label}**")
 
-        # Visualisasi probabilitas
-        st.subheader("Confidence Level")
-        st.write(f"🐱 Cat: {prob_cat:.4f}")
-        st.progress(float(prob_cat))
-
-        st.write(f"🐶 Dog: {prob_dog:.4f}")
-        st.progress(float(prob_dog))
-
-        # Info tambahan
-        st.info("Model: MobileNetV2 | Input Size: 128x128 | Dataset: Microsoft Cats vs Dogs")
+        # Tampilkan confidence setiap kelas
+        st.subheader("Confidence per Class")
+        for class_name, prob in probs.items():
+            st.write(f"{class_name}: {prob:.4f}")
+            st.progress(float(prob))
