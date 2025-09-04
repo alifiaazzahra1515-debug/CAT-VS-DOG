@@ -37,7 +37,13 @@ idx_to_class = {v: k for k, v in class_indices.items()}
 # ======================================================
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model(MODEL_PATH)
+    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+
+    # Jika model punya lebih dari 1 input → pakai input utama
+    if isinstance(model.input, list):
+        model = tf.keras.Model(inputs=model.input[0], outputs=model.output)
+
+    return model
 
 model = load_model()
 
