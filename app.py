@@ -1,66 +1,89 @@
 import streamlit as st
 import numpy as np
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing import image
+import requests
+import os
+import json
 from PIL import Image
 import tensorflow as tf
 
-# ===== Download & Load Model dari Hugging Face link =====
-MODEL_URL = "https://huggingface.co/alifia1/catvsdog/resolve/main/model_mobilenetv2.keras"
+# ======================================================
+# Konfigurasi
+# ======================================================
+MODEL_URL = "https://huggingface.co/alifia1/catdog1/resolve/main/model_mobilenetv2.h5"
+MODEL_PATH = "model_mobilenetv2.h5"
+CLASS_INDICES_PATH = "class_indices.json"
+IMG_SIZE = 128
 
+# ======================================================
+# Download model jika belum ada
+# ======================================================
+if not os.path.exists(MODEL_PATH):
+    with st.spinner("📥 Downloading model from Hugging Face..."):
+        r = requests.get(MODEL_URL)
+        with open(MODEL_PATH, "wb") as f:
+            f.write(r.content)
+
+# ======================================================
+# Load class indices (Cat → 0, Dog → 1)
+# ======================================================
+with open(CLASS_INDICES_PATH, "r") as f:
+    class_indices = json.load(f)
+
+# Buat mapping index → label
+idx_to_class = {v: k for k, v in class_indices.items()}
+
+# ======================================================
+# Load model dengan cache
+# ======================================================
 @st.cache_resource
-def load_hf_model():
-    model_path = tf.keras.utils.get_file("model_mobilenetv2.keras", MODEL_URL)
-    model = load_model(model_path)
-    return model
+def load_model():
+    return tf.keras.models.load_model(MODEL_PATH)
 
-model = load_hf_model()
-IMG_SIZE = (224, 224)  # ukuran input MobileNetV2
+model = load_model()
 
-# ===== UI Streamlit =====
-st.set_page_config(
-    page_title="Cat vs Dog Classifier",
-    page_icon="🐶🐱",
-    layout="wide"
-)
+# ======================================================
+# Fungsi Prediksi
+# ======================================================
+def predict(image: Image.Image):
+    img = image.resize((IMG_SIZE, IMG_SIZE))
+    arr = np.array(img) / 255.0
+    arr = np.expand_dims(arr, axis=0)
 
-st.title("🐶🐱 Cat vs Dog Classifier")
-st.markdown(
-    """
-    ### Upload gambar kucing atau anjing untuk diklasifikasi  
-    Model ini diambil langsung dari **Hugging Face Hub**.  
-    """
-)
+    prob = model.predict(arr, verbose=0)[0][0]
 
-# Upload file
-uploaded_file = st.file_uploader("Pilih gambar...", type=["jpg", "jpeg", "png"])
+    # Probabilitas untuk kedua kelas
+    prob_cat = 1 - prob
+    prob_dog = prob
 
-if uploaded_file is not None:
-    # Tampilkan gambar
-    image_display = Image.open(uploaded_file).convert("RGB")
-    st.image(image_display, caption="Gambar yang diupload", use_column_width=True)
+    pred_class = "Dog" if prob_dog > 0.5 else "Cat"
+    return pred_class, prob_cat, prob_dog
 
-    # Preprocess
-    img = image_display.resize(IMG_SIZE)
-    x = image.img_to_array(img)
-    x = np.expand_dims(x, axis=0) / 255.0
+# ======================================================
+# Streamlit UI
+# ======================================================
+st.set_page_config(page_title="Cat vs Dog Classifier", page_icon="🐶🐱", layout="centered")
 
-    # Prediksi
-    preds = model.predict(x)
-    pred_class = int(np.argmax(preds, axis=1)[0])
-    confidence = float(np.max(preds))
+st.title("🐶🐱 Cat vs Dog Classifier - MobileNetV2")
+st.markdown("Upload gambar **Kucing** atau **Anjing**, lalu klik **Prediksi** untuk melihat hasil klasifikasi.")
 
-    # Label mapping
-    class_names = ["Cat", "Dog"]
+uploaded_file = st.file_uploader("📂 Upload gambar", type=["jpg", "jpeg", "png"])
 
-    # ===== Output =====
-    st.subheader("🔎 Hasil Prediksi")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Predicted Class", class_names[pred_class])
-    with col2:
-        st.metric("Confidence", f"{confidence*100:.2f}%")
+if uploaded_file:
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, caption="Gambar yang diupload", use_container_width=True)
 
-    st.markdown("### 📊 Probabilitas per Kelas")
-    probs = {class_names[i]: float(preds[0][i]) for i in range(len(class_names))}
-    st.json(probs)
+    if st.button("🔍 Prediksi"):
+        label, prob_cat, prob_dog = predict(image)
+
+        st.success(f"Hasil Prediksi: **{label}**")
+
+        # Visualisasi probabilitas
+        st.subheader("Confidence Level")
+        st.write(f"🐱 Cat: {prob_cat:.4f}")
+        st.progress(float(prob_cat))
+
+        st.write(f"🐶 Dog: {prob_dog:.4f}")
+        st.progress(float(prob_dog))
+
+        # Info tambahan
+        st.info("Model: MobileNetV2 | Input Size: 128x128 | Dataset: Microsoft Cats vs Dogs")
