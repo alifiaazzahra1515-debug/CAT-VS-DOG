@@ -1,5 +1,6 @@
 import streamlit as st
 import numpy as np
+import requests
 import os
 import json
 from PIL import Image
@@ -8,9 +9,19 @@ import tensorflow as tf
 # ======================================================
 # Konfigurasi
 # ======================================================
+MODEL_URL = "https://huggingface.co/alifia1/catdog1/resolve/main/model_mobilenetv2.keras"
 MODEL_PATH = "model_mobilenetv2.keras"
 CLASS_INDICES_PATH = "class_indices.json"
 IMG_SIZE = 128
+
+# ======================================================
+# Download model jika belum ada
+# ======================================================
+if not os.path.exists(MODEL_PATH):
+    with st.spinner("📥 Downloading model (.keras) from Hugging Face..."):
+        r = requests.get(MODEL_URL)
+        with open(MODEL_PATH, "wb") as f:
+            f.write(r.content)
 
 # ======================================================
 # Load class indices (Cat → 0, Dog → 1)
@@ -52,11 +63,11 @@ def predict(image: Image.Image):
 # ======================================================
 st.set_page_config(page_title="Cat vs Dog Classifier", page_icon="🐶🐱", layout="centered")
 
-st.title("🐶🐱 Cat vs Dog Classifier - MobileNetV2")
+st.title("🐶🐱 Cat vs Dog Classifier - MobileNetV2 (.keras)")
 st.markdown(
     """
-    Upload gambar **Kucing** atau **Anjing**, lalu klik **Prediksi** untuk melihat hasil klasifikasi.
-    Model ini dilatih dengan arsitektur **MobileNetV2** dan dataset *Microsoft Cats vs Dogs*.
+    Upload gambar **Kucing** atau **Anjing**, lalu klik **Prediksi** untuk melihat hasil klasifikasi.  
+    Model ini diambil dari **Hugging Face Hub** dalam format `.keras` (lebih aman & modern dibanding `.h5`).
     """
 )
 
