@@ -29,9 +29,11 @@ else:
 @st.cache_resource
 def load_model():
     model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-    # Jika model punya multiple input → ambil input pertama
-    if isinstance(model.input, list):
-        model = tf.keras.Model(inputs=model.input[0], outputs=model.output)
+
+    # FIX: kalau Sequential belum pernah dipanggil
+    if not model.built:
+        model.build((None, IMG_SIZE, IMG_SIZE, 3))  # RGB input
+
     return model
 
 model = load_model()
@@ -46,19 +48,24 @@ def predict(image: Image.Image):
 
     preds = model.predict(arr, verbose=0)
 
-    # Binary classification (1 neuron sigmoid)
+    # Binary classification (sigmoid, 1 neuron)
     if preds.shape[-1] == 1:
         prob = preds[0][0]
         prob_class0 = 1 - prob
         prob_class1 = prob
         pred_class = 1 if prob_class1 > 0.5 else 0
-        return idx_to_class[pred_class], {idx_to_class[0]: prob_class0, idx_to_class[1]: prob_class1}
+        return idx_to_class[pred_class], {
+            idx_to_class[0]: float(prob_class0),
+            idx_to_class[1]: float(prob_class1)
+        }
 
-    # Multi-class classification (softmax)
+    # Multi-class classification (softmax, >1 neuron)
     else:
         probs = preds[0]
         pred_class = np.argmax(probs)
-        return idx_to_class[pred_class], {idx_to_class[i]: float(probs[i]) for i in range(len(probs))}
+        return idx_to_class[pred_class], {
+            idx_to_class[i]: float(probs[i]) for i in range(len(probs))
+        }
 
 # ======================================================
 # Streamlit UI
@@ -79,8 +86,8 @@ if uploaded_file:
 
         st.success(f"Hasil Prediksi: **{label}**")
 
-        # Tampilkan confidence setiap kelas
+        # Tampilkan confidence per class
         st.subheader("Confidence per Class")
         for class_name, prob in probs.items():
             st.write(f"{class_name}: {prob:.4f}")
-            st.progress(float(prob))
+            st.progress(prob)
