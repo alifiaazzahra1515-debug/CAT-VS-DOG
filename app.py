@@ -4,6 +4,7 @@ import os
 from PIL import Image
 import tensorflow as tf
 import json
+import matplotlib.pyplot as plt
 
 # ======================================================
 # Konfigurasi
@@ -70,24 +71,53 @@ def predict(image: Image.Image):
 # ======================================================
 # Streamlit UI
 # ======================================================
-st.set_page_config(page_title="CNN Image Classifier", page_icon="🖼️", layout="centered")
+st.set_page_config(page_title="CNN Image Classifier", page_icon="🖼️", layout="wide")
 
-st.title("🖼️ CNN Image Classifier")
-st.markdown("Upload gambar untuk diprediksi dengan **best_cnn_model.h5**.")
+# Sidebar
+st.sidebar.title("ℹ️ Tentang Aplikasi")
+st.sidebar.markdown(
+    """
+    **CNN Image Classifier**  
+    Dibuat dengan **TensorFlow + Streamlit**.  
+    - Upload gambar 🖼️  
+    - Klik **Prediksi** 🔍  
+    - Lihat hasil + confidence 📊  
+    """
+)
+st.sidebar.info("Model: best_cnn_model.h5\n\nArsitektur: CNN\n\nInput: 128x128 RGB")
+
+# Header
+st.title("🎨 CNN Image Classifier")
+st.markdown("Aplikasi interaktif untuk mengklasifikasi gambar dengan **Convolutional Neural Network**.")
 
 uploaded_file = st.file_uploader("📂 Upload gambar", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Gambar yang diupload", use_container_width=True)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.image(image, caption="📸 Gambar yang diupload", use_container_width=True)
 
     if st.button("🔍 Prediksi"):
         label, probs = predict(image)
 
-        st.success(f"Hasil Prediksi: **{label}**")
+        with col2:
+            st.success(f"**Prediksi: {label}**")
 
-        # Tampilkan confidence per class
-        st.subheader("Confidence per Class")
-        for class_name, prob in probs.items():
-            st.write(f"{class_name}: {prob:.4f}")
-            st.progress(prob)
+            # Progress bar untuk tiap kelas
+            st.subheader("Confidence Level")
+            for class_name, prob in probs.items():
+                st.write(f"{class_name}: {prob:.4f}")
+                st.progress(prob)
+
+            # Chart probabilitas
+            st.subheader("Distribusi Probabilitas")
+            fig, ax = plt.subplots()
+            ax.bar(probs.keys(), probs.values(), color="skyblue")
+            ax.set_ylabel("Confidence")
+            ax.set_title("Probabilitas Prediksi per Kelas")
+            st.pyplot(fig)
+
+        st.balloons()
