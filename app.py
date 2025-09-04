@@ -1,89 +1,98 @@
+# app.py
 import streamlit as st
-import numpy as np
-import requests
-import os
-import json
-from PIL import Image
 import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing import image
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image, ImageEnhance
 
-# ======================================================
-# Konfigurasi
-# ======================================================
-MODEL_URL = "https://huggingface.co/alifia1/catdog1/resolve/main/model_mobilenetv2.h5"
-MODEL_PATH = "model_mobilenetv2.h5"
-CLASS_INDICES_PATH = "class_indices.json"
-IMG_SIZE = 128
+# --------------------------
+# Page config
+# --------------------------
+st.set_page_config(
+    page_title="🐱🐶 Cat vs Dog Classifier",
+    page_icon="🐾",
+    layout="centered"
+)
 
-# ======================================================
-# Download model jika belum ada
-# ======================================================
-if not os.path.exists(MODEL_PATH):
-    with st.spinner("📥 Downloading model from Hugging Face..."):
-        r = requests.get(MODEL_URL)
-        with open(MODEL_PATH, "wb") as f:
-            f.write(r.content)
+st.title("🐱🐶 Cat vs Dog Image Classifier")
+st.write("Upload an image of a cat or dog, adjust brightness/contrast, and see the prediction!")
 
-# ======================================================
-# Load class indices (Cat → 0, Dog → 1)
-# ======================================================
-with open(CLASS_INDICES_PATH, "r") as f:
-    class_indices = json.load(f)
-
-# Buat mapping index → label
-idx_to_class = {v: k for k, v in class_indices.items()}
-
-# ======================================================
-# Load model dengan cache
-# ======================================================
+# --------------------------
+# Load model
+# --------------------------
 @st.cache_resource
-def load_model():
-    return tf.keras.models.load_model(MODEL_PATH)
+def load_cat_dog_model():
+    model = load_model("best_cnn_model.h5")
+    return model
 
-model = load_model()
+model = load_cat_dog_model()
 
-# ======================================================
-# Fungsi Prediksi
-# ======================================================
-def predict(image: Image.Image):
-    img = image.resize((IMG_SIZE, IMG_SIZE))
-    arr = np.array(img) / 255.0
-    arr = np.expand_dims(arr, axis=0)
+# --------------------------
+# Upload image
+# --------------------------
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
-    prob = model.predict(arr, verbose=0)[0][0]
+if uploaded_file is not None:
+    img = Image.open(uploaded_file)
+    
+    # --------------------------
+    # Slider brightness / contrast
+    # --------------------------
+    st.subheader("Adjust Image")
+    brightness = st.slider("Brightness", 0.5, 2.0, 1.0)
+    contrast = st.slider("Contrast", 0.5, 2.0, 1.0)
+    
+    enhancer_b = ImageEnhance.Brightness(img)
+    img = enhancer_b.enhance(brightness)
+    
+    enhancer_c = ImageEnhance.Contrast(img)
+    img = enhancer_c.enhance(contrast)
+    
+    st.image(img, caption='Adjusted Image', use_column_width=True)
+    
+    # --------------------------
+    # Preprocess for model
+    # --------------------------
+    img_resized = img.resize((128, 128))  # sesuaikan dengan input model
+    img_array = image.img_to_array(img_resized)
+    img_array = np.expand_dims(img_array, axis=0) / 255.0
+    
+    # --------------------------
+    # Prediction
+    # --------------------------
+    prediction = model.predict(img_array)[0]
+    classes = ["Cat", "Dog"]
 
-    # Probabilitas untuk kedua kelas
-    prob_cat = 1 - prob
-    prob_dog = prob
-
-    pred_class = "Dog" if prob_dog > 0.5 else "Cat"
-    return pred_class, prob_cat, prob_dog
-
-# ======================================================
-# Streamlit UI
-# ======================================================
-st.set_page_config(page_title="Cat vs Dog Classifier", page_icon="🐶🐱", layout="centered")
-
-st.title("🐶🐱 Cat vs Dog Classifier - MobileNetV2")
-st.markdown("Upload gambar **Kucing** atau **Anjing**, lalu klik **Prediksi** untuk melihat hasil klasifikasi.")
-
-uploaded_file = st.file_uploader("📂 Upload gambar", type=["jpg", "jpeg", "png"])
-
-if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Gambar yang diupload", use_container_width=True)
-
-    if st.button("🔍 Prediksi"):
-        label, prob_cat, prob_dog = predict(image)
-
-        st.success(f"Hasil Prediksi: **{label}**")
-
-        # Visualisasi probabilitas
-        st.subheader("Confidence Level")
-        st.write(f"🐱 Cat: {prob_cat:.4f}")
-        st.progress(float(prob_cat))
-
-        st.write(f"🐶 Dog: {prob_dog:.4f}")
-        st.progress(float(prob_dog))
-
-        # Info tambahan
-        st.info("Model: MobileNetV2 | Input Size: 128x128 | Dataset: Microsoft Cats vs Dogs")
+    if len(prediction) == 1:  # sigmoid
+        prob_dog = float(prediction[0])
+        prob_cat = 1 - prob_dog
+        probs = [prob_cat, prob_dog]
+        pred_class = classes[np.argmax(probs)]
+    else:  # softmax
+        probs = prediction
+        pred_class = classes[np.argmax(probs)]
+    
+    # --------------------------
+    # Display results
+    # --------------------------
+    st.subheader(f"Prediction: {pred_class}")
+    st.write(f"Probability: Cat: {probs[0]:.2f}, Dog: {probs[1]:.2f}")
+    
+    # --------------------------
+    # Interactive bar chart
+    # --------------------------
+    fig, ax = plt.subplots()
+    bars = ax.bar(classes, probs, color=['#1f77b4', '#ff7f0e'])
+    ax.set_ylim([0, 1])
+    ax.set_ylabel("Probability")
+    ax.set_title("Prediction Probabilities")
+    
+    # Annotate bars
+    for bar, prob in zip(bars, probs):
+        height = bar.get_height()
+        ax.annotate(f'{prob:.2f}', xy=(bar.get_x() + bar.get_width()/2, height),
+                    xytext=(0,3), textcoords="offset points", ha='center', va='bottom')
+    
+    st.pyplot(fig)
